@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tide::Request;
-use serde_json::{Value, json};
+use serde_json::{Value, json, Map};
 
 #[derive(PartialEq)]
 enum Access
@@ -33,9 +33,33 @@ struct DataBase
     user_groups: HashMap<UserGroupId, UserGroupProps>,
 }
 
+fn get_field<T>(object: &serde_json::Map<String, Value>, key: &str) -> T
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Debug,
+{
+    object.get(key).unwrap().as_str().unwrap().parse().unwrap()
+}
+
 fn get_not_used_in_map_id<T>(map: &HashMap<Id, T>) -> Id
 {
     *map.keys().max().unwrap() + 1
+}
+fn user_create(input_obj: &Map<String, Value>, state: &Arc<Mutex<DataBase>>) -> Result<Value, String>
+{
+    let name: String = get_field(input_obj, "name");
+    if name.len() > 0
+    {
+        let mut guard = state.lock().unwrap();
+        let id = get_not_used_in_map_id(&guard.users);
+        guard.users.insert(id, name);
+
+        Ok(json!({"id": id}))
+    }
+    else
+    {
+        Err("bad name".to_string())
+    }
 }
 
 fn main() -> Result<(), std::io::Error> 
@@ -84,35 +108,60 @@ fn main() -> Result<(), std::io::Error>
         // Routes
         app.at("/users")
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
-                let state = request.state();
-                let guard = state.lock().unwrap();
+                let guard = request.state().lock().unwrap();
                 Ok(json!(guard.users))
             });
         app.at("/groups")
             .get(|request: Request<Arc<Mutex<DataBase>>>| async move {
-                let state = request.state();
-                let guard = state.lock().unwrap();
+                let guard = request.state().lock().unwrap();
                 Ok(json!(guard.groups))
             });
         app.at("/user/create")
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
-                let body: Option<Value> = request.body_json().await.ok();
-                match body.and_then(
-                    |value| value.as_object().and_then(
-                    |object| object.get("name").and_then(
-                    |value| value.as_str().and_then(
-                    |name|
-                    {
-                        let state = request.state();
-                        let mut guard = state.lock().unwrap();
-                        let id = get_not_used_in_map_id(&guard.users);
-                        guard.users.insert(id, name.to_string());
-                        Some(json!({"id": id}))
-                    }
-                ))))
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                Ok(match user_create(object, request.state())
                 {
-                    Some(res) => Ok(res),
-                    None => Ok(json!({"error": "cant read name"})),
+                    Ok(value) => tide::Response::builder(200)
+                        .body(tide::Body::from_json(&value)?)
+                        .build(),
+                    Err(msg) => tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": msg}))?)
+                        .build(),
+                })
+            });
+        app.at("/group/create")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+
+                let creator_id: Id = get_field(object, "creator_id");
+                let mut guard = request.state().lock().unwrap();
+                if guard.users.contains_key(&creator_id)
+                {
+                    let id = get_not_used_in_map_id(&guard.groups);
+                    guard.groups.insert(id, false);
+                    guard.user_groups.insert(
+                        UserGroupId
+                        {
+                            user_id: creator_id,
+                            group_id: id,
+                        },
+                        UserGroupProps
+                        {
+                            access_level: Access::Admin,
+                            santa_id: 0,
+                        }
+                    );
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({"group_id": id}))?)
+                        .build())
+                }
+                else
+                {
+                    Ok(tide::Response::builder(400)
+                        .body(tide::Body::from_json(&json!({"error": "bad creator_id"}))?)
+                        .build())
                 }
             });
 
