@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use tide::Request;
 use serde_json::{Value, json};
 
+#[derive(PartialEq)]
 enum Access
 {
     User,
@@ -112,6 +113,54 @@ fn main() -> Result<(), std::io::Error>
                 {
                     Some(res) => Ok(res),
                     None => Ok(json!({"error": "cant read name"})),
+                }
+            });
+
+        app.at("/group/secret_santa")
+            .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
+                let body: Value = request.body_json().await?;
+                let object = body.as_object().unwrap();
+                let groupId: Id = data.user_groups.get_field(object, "group_id");
+                let adminId: Id = data.user_groups.get_field(object, "admin_id");
+
+                let admin = match data.user_groups.get(&UserGroupId{user_id: adminId, group_id: groupId})
+                {
+                    Some(res) => res,
+                    None => panic!()
+                };
+                if admin.access_level == Access::Admin{
+                    data.groups.get_mut(&(groupId)) = false;
+                    let mut count = 0;
+                    let mut out = String::new();
+                    out += "{\n";
+                    for (key, val) in data.user_groups{
+                        count += 1;
+                        if key.group_id == groupId{
+                            let santaId = key.user_id+1;
+                            match data.user_groups.get(&UserGroupId{user_id: santaId, group_id: groupId})
+                            {
+                                Some(res) => {val.santa_id = santaId},
+                                None => {
+                                    santaId -= count;
+                                    val.santa_id = santaId;
+                                }
+                            }
+                            out += "\t\"";
+                            out.push_str(&*(key.user_id.to_string()));
+                            out += "\":\"";
+                            out.push_str(&*(val.santa_id.to_string()));
+                            out += "\"\n";
+                        }
+                    }
+                    out += "}";
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!(out))?)
+                        .build())
+                }
+                else {
+                    Ok(tide::Response::builder(200)
+                        .body(tide::Body::from_json(&json!({"error": "not an admin"}))?)
+                        .build())
                 }
             });
         app.listen("127.0.0.1:8080").await
