@@ -169,24 +169,25 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let groupId: Id = data.user_groups.get_field(object, "group_id");
-                let adminId: Id = data.user_groups.get_field(object, "admin_id");
+                let groupId: Id = get_field(object, "group_id");
+                let adminId: Id = get_field(object, "admin_id");
+                let mut guard = request.state().lock().unwrap();
 
-                let admin = match data.user_groups.get(&UserGroupId{user_id: adminId, group_id: groupId})
+                let admin = match guard.user_groups.get(&UserGroupId{user_id: adminId, group_id: groupId})
                 {
                     Some(res) => res,
                     None => panic!()
                 };
                 if admin.access_level == Access::Admin{
-                    data.groups.get_mut(&(groupId)) = false;
+                    *guard.groups.get_mut(&(groupId)).unwrap() = true;
                     let mut count = 0;
                     let mut out = String::new();
                     out += "{\n";
-                    for (key, val) in data.user_groups{
+                    for (&key,&mut val) in &mut guard.user_groups{
                         count += 1;
                         if key.group_id == groupId{
-                            let santaId = key.user_id+1;
-                            match data.user_groups.get(&UserGroupId{user_id: santaId, group_id: groupId})
+                            let mut santaId = key.user_id+1;
+                            match guard.user_groups.get(&UserGroupId{user_id: santaId, group_id: groupId})
                             {
                                 Some(res) => {val.santa_id = santaId},
                                 None => {
