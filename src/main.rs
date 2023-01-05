@@ -6,6 +6,7 @@ use tide::Request;
 use serde_json::{Value, json, Map};
 
 #[derive(PartialEq)]
+#[derive(Clone)]
 enum Access
 {
     User,
@@ -14,12 +15,14 @@ enum Access
 
 type Id = u32;
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, serde::Serialize)]
+#[derive(Clone)]
 struct UserGroupId
 {
     user_id: Id,
     group_id: Id,
 }
+#[derive(Clone)]
 struct UserGroupProps
 {
     access_level: Access,
@@ -169,42 +172,31 @@ fn main() -> Result<(), std::io::Error>
             .post(|mut request: Request<Arc<Mutex<DataBase>>>| async move {
                 let body: Value = request.body_json().await?;
                 let object = body.as_object().unwrap();
-                let groupId: Id = get_field(object, "group_id");
-                let adminId: Id = get_field(object, "admin_id");
+                let group_id: Id = get_field(object, "group_id");
+                let admin_id: Id = get_field(object, "admin_id");
                 let mut guard = request.state().lock().unwrap();
 
-                let admin = match guard.user_groups.get(&UserGroupId{user_id: adminId, group_id: groupId})
-                {
-                    Some(res) => res,
-                    None => panic!()
-                };
+                let admin = guard.user_groups.get(&UserGroupId{user_id: admin_id, group_id: group_id}).unwrap();
                 if admin.access_level == Access::Admin{
-                    *guard.groups.get_mut(&(groupId)).unwrap() = true;
+                    *guard.groups.get_mut(&(group_id)).unwrap() = true;
                     let mut count = 0;
-                    let mut out = String::new();
-                    out += "{\n";
-                    for (&key,&mut val) in &mut guard.user_groups{
-                        count += 1;
-                        if key.group_id == groupId{
-                            let mut santaId = key.user_id+1;
-                            match guard.user_groups.get(&UserGroupId{user_id: santaId, group_id: groupId})
+                    let mut santas = Vec::new();
+
+                    for (key, mut val) in guard.user_groups.clone() {
+                        if key.group_id == group_id {
+                            count += 1;
+                            let mut santa_id = key.user_id + 1;
+                            if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id: group_id})
                             {
-                                Some(res) => {val.santa_id = santaId},
-                                None => {
-                                    santaId -= count;
-                                    val.santa_id = santaId;
-                                }
+                                santa_id -= count;
                             }
-                            out += "\t\"";
-                            out.push_str(&*(key.user_id.to_string()));
-                            out += "\":\"";
-                            out.push_str(&*(val.santa_id.to_string()));
-                            out += "\"\n";
+                            santas.push((key.clone(), santa_id));
+                            val.santa_id = santa_id;
+                            *guard.user_groups.get_mut(&key).unwrap() = val;
                         }
                     }
-                    out += "}";
                     Ok(tide::Response::builder(200)
-                        .body(tide::Body::from_json(&json!(out))?)
+                        .body(tide::Body::from_json(&json!(santas))?)
                         .build())
                 }
                 else {
