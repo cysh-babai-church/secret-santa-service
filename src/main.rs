@@ -401,7 +401,7 @@ fn main() -> Result<(), std::io::Error>
                             //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
                             //4-5
                             //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
-                            
+
 
                             for (key, mut val) in guard.user_groups.clone() {
                                 if key.group_id == group_id {
@@ -418,7 +418,7 @@ fn main() -> Result<(), std::io::Error>
                                     *guard.user_groups.get_mut(&key).unwrap() = val;
                                 }
                             }
-                            response_data(json!(santas))
+                            response_empty()
 
                         }
                         else {
