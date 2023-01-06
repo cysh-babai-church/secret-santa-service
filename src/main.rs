@@ -386,53 +386,47 @@ fn main() -> Result<(), std::io::Error>
                     Some(res) => {
                         admin = res;
                         if admin.access_level == Access::Admin{
-                            if !guard.groups.contains_key(&(group_id)){
-                                response_error("no such group")
-                            }
-                            else
-                            {
-                                *guard.groups.get_mut(&(group_id)).unwrap() = true;
+                            *guard.groups.get_mut(&(group_id)).unwrap() = true;
 
 
-                                let mut count = 0;
-                                let mut santas = Vec::new();
+                            let mut count = 0;
+                            let mut santas = Vec::new();
 
-                                //Пользователю присваивается тайный кыш бабай с Id на 1 больше, чем у него.
-                                //Если при итерации пользователь не из этой группы, то его тайный кыш бабай - тот пользователь,
-                                //который был первым из тех пользователей этой группы, что шли друг за другом в общем списке.
-                                //Например: из нужной группы пользователи с id 0, 1, 2, 4, 5. Тайный кыш бабай распределится таким образом
-                                //0-1
-                                //1-2
-                                //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
-                                //4-5
-                                //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
+                            //Пользователю присваивается тайный кыш бабай с Id на 1 больше, чем у него.
+                            //Если при итерации пользователь не из этой группы, то его тайный кыш бабай - тот пользователь,
+                            //который был первым из тех пользователей этой группы, что шли друг за другом в общем списке.
+                            //Например: из нужной группы пользователи с id 0, 1, 2, 4, 5. Тайный кыш бабай распределится таким образом
+                            //0-1
+                            //1-2
+                            //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
+                            //4-5
+                            //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
 
-                                let mut err = false;
+                            let mut err = false;
 
-                                for (key, mut val) in guard.user_groups.clone() {
-                                    if key.group_id == group_id {
-                                        count += 1;
-                                        let mut santa_id = key.user_id + 1;
-                                        if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id: group_id})
-                                        {
-                                            santa_id -= count;
-                                            count = 0;
-                                        }
-                                        santas.push((key.clone(), santa_id));
-                                        val.santa_id = santa_id;
-                                        if !guard.user_groups.contains_key(&key){
-                                            err = true;
-                                            break;
-                                        }
-                                        *guard.user_groups.get_mut(&key).unwrap() = val;
+                            for (key, mut val) in guard.user_groups.clone() {
+                                if key.group_id == group_id {
+                                    count += 1;
+                                    let mut santa_id = key.user_id + 1;
+                                    if !guard.user_groups.contains_key(&UserGroupId{user_id: santa_id, group_id: group_id})
+                                    {
+                                        santa_id -= count;
+                                        count = 0;
                                     }
+                                    santas.push((key.clone(), santa_id));
+                                    val.santa_id = santa_id;
+                                    if !guard.user_groups.contains_key(&key){
+                                        err = true;
+                                        break;
+                                    }
+                                    *guard.user_groups.get_mut(&key).unwrap() = val;
                                 }
-                                if err{
-                                    response_error("something went wrong")
-                                }
-                                else{
-                                    response_data(json!(santas))
-                                }
+                            }
+                            if err{
+                                response_error("something went wrong")
+                            }
+                            else{
+                                response_data(json!(santas))
                             }
 
                         }
