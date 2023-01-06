@@ -401,8 +401,7 @@ fn main() -> Result<(), std::io::Error>
                             //2-0 (2+1=3) 3 нет в этой группе, значит вычитаем count = 3, получаем 0. И обнуляем его сразу
                             //4-5
                             //5-4 (5+1=6) 6 нет в этой группе, вычитаем count = 2, получаем 4
-
-                            let mut err = false;
+                            
 
                             for (key, mut val) in guard.user_groups.clone() {
                                 if key.group_id == group_id {
@@ -415,19 +414,11 @@ fn main() -> Result<(), std::io::Error>
                                     }
                                     santas.push((key.clone(), santa_id));
                                     val.santa_id = santa_id;
-                                    if !guard.user_groups.contains_key(&key){
-                                        err = true;
-                                        break;
-                                    }
+
                                     *guard.user_groups.get_mut(&key).unwrap() = val;
                                 }
                             }
-                            if err{
-                                response_error("something went wrong")
-                            }
-                            else{
-                                response_data(json!(santas))
-                            }
+                            response_data(json!(santas))
 
                         }
                         else {
